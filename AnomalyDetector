@@ -76,30 +76,26 @@ warnings.filterwarnings("ignore")
 #    CLIENT LISTS
 
 # Client list for requesting data from server
-# clientlistJack = "'Darwen Terracotta','J & D Pierce - Glengarnock','J & D Pierce - East Kilbride','Safran Nacelles Ltd','Pharmaron - Rushden','Pharmaron - Cardiff','Pharmaron - Cramlington','Pharmaron - Hoddesdon','EBAC Ltd','Herbert Walkers','Norton Cast Products','Gordon Ellis & Co`','Branston - Perth','Branston - Lincoln Protein','Branston - Lincoln Prep','Branston - Ilminster','Branston - Lincoln Fresh','Braces Bakery Pen-Y-Fan','Braces Bakery CPM','McQueens Dairies','Tandom Metallurgical Group Ltd'"
-# clientlistConor = "'ELE Advanced - Skipton Road','ELE Advanced - Churchill Way','Sun Magic Juices - Nelson','Leggett & Platt','Emerson & Renwick Ltd - Peel Bank', 'Emerson & Renwick - Technology Centre'"
-# clientlistHeather = "'Alma Products','Anchor Magnets','The Authentic Food Company','Chadwicks of Bury - Clondalkin','Kitwave - Millers Food, York','Kitwave - Eden Farm, Peterlee','Kitwave - Eden farm, Luton','Libra Speciality Chemicals','Strathmore Foods Ltd','URM Ltd - Tilbury','URM Ltd - South Kirkby','URM Ltd - Knottingley','URM Ltd - Doncaster','Head Office - Desking','Seating'"
-# clientlistWill = "'Airedale Chemicals','Baker & Baker - Wirral','DFS-Store-Wednesbury','DFS - Store - Watford','DFS - Store - Darley Dale','DFS - SoDelCo - Rugby','ESG Group','Finlay Hull','Frederic Robinson - Unicorn Packaging Centre','Frederic Robinson - The Airport','Frederic Robinson - Spread Eagle','Northern Automotive Systems','Soufflet Malt','Peterborough','Cullompton','Cobham','Cambridge','Blackburn & Darwen','Beaconsfield','Baldock'"
-# clientlistShakil = "'Amann Threads UK','Baker & Baker - Bradford','Chemoxy - Middlesbrough','Chemoxy - Billingham','Gilmour & Dean Ltd','Hycrome','Kettle Produce - Orkie Farm','Kettle Produce - Balmalcolm','Town Centre Securities - Carvers Warehouse'"
-# ExtraClients = "'Graham & Brown - Shuttleworth Mead','Graham & Brown - India Mill','Harder Bros Ltd','Finlay Beverages','Palram DPL Ltd','Farrel Ltd'"
-# clientlist = clientlistJack + "," + clientlistConor + "," +clientlistHeather + "," +clientlistWill + "," +clientlistShakil  + "," + ExtraClients
+clientlistJack = ""
+clientlistConor = ""
+clientlistHeather = ""
+clientlistWill = ""
+clientlistShakil = ""
+ExtraClients = ""
+clientlist = clientlistJack + "," + clientlistConor + "," +clientlistHeather + "," +clientlistWill + "," +clientlistShakil  + "," + ExtraClients
 
-#clientlist = "'Pharmaron - Cardiff','Braces Bakery CPM','McQueens Dairies','Tandom Metallurgical Group Ltd'"
-clientlist = "'Darwen Terracotta','Herbert Walkers','Gordon Ellis & Co`'"
 
-JackClients = ['Safran Nacelles Ltd.docx','Pharmaron - Rushden.docx','Pharmaron - Cardiff.docx','Pharmaron - Cramlington.docx','Pharmaron - Hoddesdon.docx','EBAC Ltd.docx','Herbert Walkers.docx','Norton Cast Products.docx','Gordon Ellis & Co`.docx','Branston - Perth.docx','Branston - Lincoln Protein.docx','Branston - Lincoln Prep.docx','Branston - Ilminster.docx','Branston - Lincoln Fresh.docx','Braces Bakery Pen-Y-Fan.docx','Braces Bakery CPM.docx','McQueens Dairies.docx','Darwen Terracotta.docx','J & D Pierce - Glengarnock.docx','J & D Pierce - East Kilbride.docx','Tandom Metallurgical Group Ltd.docx']
-HeatherClients = ['Alma Products.docx','Anchor Magnets.docx','The Authentic Food Company.docx','Chadwicks of Bury - Clondalkin.docx','Kitwave - Millers Food, York.docx','Kitwave - Eden Farm, Peterlee.docx','Kitwave - Eden farm, Luton.docx','Libra Speciality Chemicals.docx','Strathmore Foods Ltd.docx','URM Ltd - Tilbury.docx','URM Ltd - South Kirkby.docx','URM Ltd - Knottingley.docx','URM Ltd - Doncaster.docx','Seating.docx','Head Office - Desking.docx']
-WillClients = ['Airedale Chemicals.docx','Baker & Baker - Wirral.docx','DFS-Store-Wednesbury.docx','DFS - Store - Watford.docx','DFS - Store - Darley Dale.docx','DFS - SoDelCo - Rugby.docx','ESG Group.docx','Finlay Hull.docx','Northern Automotive Systems.docx','Soufflet Malt.docx','Peterborough.docx','Cullompton.docx','Cobham.docx','Cambridge.docx','Blackburn & Darwen.docx','Beaconsfield.docx','Baldock.docx']
-ShakilClients = ['Amann Threads UK.docx','Baker & Baker - Bradford.docx','Chemoxy - Middlesbrough.docx','Chemoxy - Billingham.docx','Gilmour & Dean Ltd.docx','Hycrome.docx','Kettle Produce - Orkie Farm.docx','Kettle Produce - Balmalcolm.docx','Town Centre Securities - Carvers Warehouse.docx']
-JakeClients = ["4"]
-ConorClients = ['ELE Advanced - Skipton Road.docx','ELE Advanced - Churchill Way.docx','Sun Magic Juices - Nelson.docx','Leggett & Platt.docx','Emerson & Renwick Ltd - Peel Bank.docx', 'Emerson & Renwick - Technology Centre.docx']
-
-AntoniaClients = ['Chadwicks of Bury - Clondalkin.docx','Frederic Robinson - Unicorn Packaging Centre.docx','Graham & Brown - Shuttleworth Mead.docx','Graham & Brown - India Mill.docx','Harder Bros Ltd.docx','Libra Speciality Chemicals.docx','Tandom Metallurgical Group Ltd.docx','Peterborough.docx','Cullompton.docx','Cobham.docx','Cambridge.docx','Blackburn & Darwen.docx','Beaconsfield.docx','Baldock.docx']
-CalumClients = ['Gilmour & Dean Ltd.docx', 'Kettle Produce - Orkie Farm.docx', 'Kettle Produce - Balmalcolm.docx', 'McQueens Dairies.docx','Strathmore Foods Ltd.docx']
-MattClients = ['Airedale Chemicals.docx', 'Chemoxy - Middlesbrough.docx', 'Chemoxy - Billingham.docx', 'EBAC Ltd.docx', 'Finlay Beverages.docx', 'Kitwave - Millers Food, York.docx', 'Kitwave - Eden Farm, Peterlee.docx', 'Kitwave - Eden farm, Luton.docx', 'Palram DPL Ltd.docx', 'Pharmaron - Cardiff.docx','Pharmaron - Cramlington.docx','URM Ltd - Tilbury.docx', 'URM Ltd - South Kirkby.docx', 'URM Ltd - Knottingley.docx', 'URM Ltd - Doncaster.docx']
-VictorClients = ['Braces Bakery Pen-Y-Fan.docx', 'Braces Bakery CPM.docx', 'Branston - Perth.docx', 'Branston - Lincoln Protein.docx', 'Branston - Lincoln Prep.docx', 'Branston - Lincoln Fresh.docx', 'Branston - Ilminster.docx', 'ESG Group.docx','Northern Automotive Systems.docx', 'Soufflet Malt.docx','Peterborough.docx','Cullompton.docx','Cobham.docx','Cambridge.docx','Blackburn & Darwen.docx','Beaconsfield.docx','Baldock.docx']
-AndyBaClients = ['DFS-Store-Wednesbury.docx', 'DFS - Store - Watford.docx', 'DFS - Store - Darley Dale.docx', 'DFS - SoDelCo - Rugby.docx', 'Emerson & Renwick Ltd - Peel Bank.docx', 'Emerson & Renwick - Technology Centre.docx', 'Gordon Ellis & Co`.docx',  'Pharmaron - Hoddesdon.docx', 'Pharmaron - Rushden.docx']
-AndyBuClients = ['Alma Products.docx', 'Amann Threads UK.docx', 'Anchor Magnets.docx', 'The Authentic Food Company.docx', 'Baker & Baker - Wirral.docx', 'Baker & Baker - Bradford.docx', 'Darwen Terracotta.docx', 'Farrel Ltd.docx', 'Herbert Walkers.docx', 'Hycrome.docx','Leggett & Platt.docx', 'Norton Cast Products.docx','Safran Nacelles Ltd.docx', 'Town Centre Securities - Carvers Warehouse.docx','Head Office - Desking.docx','Seating.docx']
+JackClients = []
+ConorClients = []
+ShakilClients = []
+WillClients = []
+HeatherClients = []
+AntoniaClients = []
+AndyBaClients = []
+AndyBuClients = []
+MattClients = []
+VictorClients = []
+CalumClients = []
 
 
 #%%
