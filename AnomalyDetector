@@ -1,0 +1,623 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Feb 19 11:23:35 2025
+
+@author: jack.berry
+"""
+# CODE STRUCTURE 
+
+#%%
+# GENERAL PROCESS
+
+#1. Retrieve all recorded data from each device for a particular client (currently up to 01/01/2024)
+
+#2. Split into seperate dataframes for each device
+
+#3. perform below algorithm
+
+#4. Split each device data frame into training set and test set where test set is the last week in the set.
+
+#4. Loop through retained dataframes and compare last week data to entire training set 
+
+#5. Present graph of any devices with anomalies AND the associated anomaly table (perhaps in a word doc?)
+
+# ---
+
+# ALGORITHM FOR DETERMINING TRAINING SET RANGE (Code for this is written and functions but in practice doesn't work - therefore only considers last 3 months for EVERY device statically)
+
+# 1. Take a preset minimum date range (for example 2 months)
+
+# 2. Calculate ACF (t=168) for this data range and save to a dataframe
+
+# 3. Add an extra week of historical data to the date range and repeat step 2. Repeat until no more data left to add.
+
+# 4. find the maximum ACF value, if r > 0.6, take this specific date range to be the training set. if r < 0.6 discard.
+
+#%%
+
+# PARAMETERS
+
+MinimumDateRange = 60    #Days
+MaximumDateRange = 120    #Days
+CoeffThreshold = 0.55     #Typically between 0.4 - 0.7
+zScoreThreshold = 2.5  #Typically a value between 2-3
+#%%
+
+# IMPORTS
+
+import pandas as pd
+import matplotlib.pyplot as plt
+import pyodbc
+from statsmodels.tsa.stattools import acf
+import math
+from datetime import datetime, timedelta
+from adtk.detector import SeasonalAD
+from adtk.data import validate_series
+import time
+import warnings
+from docx import Document
+from docx.shared import Inches
+import smtplib
+import os
+from email.message import EmailMessage
+import re
+import shutil
+import glob
+from pathlib import Path
+from dateutil.relativedelta import relativedelta
+import datetime
+from datetime import datetime, timedelta
+warnings.filterwarnings("ignore")
+
+
+
+#%%
+
+#    CLIENT LISTS
+
+# Client list for requesting data from server
+# clientlistJack = "'Darwen Terracotta','J & D Pierce - Glengarnock','J & D Pierce - East Kilbride','Safran Nacelles Ltd','Pharmaron - Rushden','Pharmaron - Cardiff','Pharmaron - Cramlington','Pharmaron - Hoddesdon','EBAC Ltd','Herbert Walkers','Norton Cast Products','Gordon Ellis & Co`','Branston - Perth','Branston - Lincoln Protein','Branston - Lincoln Prep','Branston - Ilminster','Branston - Lincoln Fresh','Braces Bakery Pen-Y-Fan','Braces Bakery CPM','McQueens Dairies','Tandom Metallurgical Group Ltd'"
+# clientlistConor = "'ELE Advanced - Skipton Road','ELE Advanced - Churchill Way','Sun Magic Juices - Nelson','Leggett & Platt','Emerson & Renwick Ltd - Peel Bank', 'Emerson & Renwick - Technology Centre'"
+# clientlistHeather = "'Alma Products','Anchor Magnets','The Authentic Food Company','Chadwicks of Bury - Clondalkin','Kitwave - Millers Food, York','Kitwave - Eden Farm, Peterlee','Kitwave - Eden farm, Luton','Libra Speciality Chemicals','Strathmore Foods Ltd','URM Ltd - Tilbury','URM Ltd - South Kirkby','URM Ltd - Knottingley','URM Ltd - Doncaster','Head Office - Desking','Seating'"
+# clientlistWill = "'Airedale Chemicals','Baker & Baker - Wirral','DFS-Store-Wednesbury','DFS - Store - Watford','DFS - Store - Darley Dale','DFS - SoDelCo - Rugby','ESG Group','Finlay Hull','Frederic Robinson - Unicorn Packaging Centre','Frederic Robinson - The Airport','Frederic Robinson - Spread Eagle','Northern Automotive Systems','Soufflet Malt','Peterborough','Cullompton','Cobham','Cambridge','Blackburn & Darwen','Beaconsfield','Baldock'"
+# clientlistShakil = "'Amann Threads UK','Baker & Baker - Bradford','Chemoxy - Middlesbrough','Chemoxy - Billingham','Gilmour & Dean Ltd','Hycrome','Kettle Produce - Orkie Farm','Kettle Produce - Balmalcolm','Town Centre Securities - Carvers Warehouse'"
+# ExtraClients = "'Graham & Brown - Shuttleworth Mead','Graham & Brown - India Mill','Harder Bros Ltd','Finlay Beverages','Palram DPL Ltd','Farrel Ltd'"
+# clientlist = clientlistJack + "," + clientlistConor + "," +clientlistHeather + "," +clientlistWill + "," +clientlistShakil  + "," + ExtraClients
+
+#clientlist = "'Pharmaron - Cardiff','Braces Bakery CPM','McQueens Dairies','Tandom Metallurgical Group Ltd'"
+clientlist = "'Darwen Terracotta','Herbert Walkers','Gordon Ellis & Co`'"
+
+JackClients = ['Safran Nacelles Ltd.docx','Pharmaron - Rushden.docx','Pharmaron - Cardiff.docx','Pharmaron - Cramlington.docx','Pharmaron - Hoddesdon.docx','EBAC Ltd.docx','Herbert Walkers.docx','Norton Cast Products.docx','Gordon Ellis & Co`.docx','Branston - Perth.docx','Branston - Lincoln Protein.docx','Branston - Lincoln Prep.docx','Branston - Ilminster.docx','Branston - Lincoln Fresh.docx','Braces Bakery Pen-Y-Fan.docx','Braces Bakery CPM.docx','McQueens Dairies.docx','Darwen Terracotta.docx','J & D Pierce - Glengarnock.docx','J & D Pierce - East Kilbride.docx','Tandom Metallurgical Group Ltd.docx']
+HeatherClients = ['Alma Products.docx','Anchor Magnets.docx','The Authentic Food Company.docx','Chadwicks of Bury - Clondalkin.docx','Kitwave - Millers Food, York.docx','Kitwave - Eden Farm, Peterlee.docx','Kitwave - Eden farm, Luton.docx','Libra Speciality Chemicals.docx','Strathmore Foods Ltd.docx','URM Ltd - Tilbury.docx','URM Ltd - South Kirkby.docx','URM Ltd - Knottingley.docx','URM Ltd - Doncaster.docx','Seating.docx','Head Office - Desking.docx']
+WillClients = ['Airedale Chemicals.docx','Baker & Baker - Wirral.docx','DFS-Store-Wednesbury.docx','DFS - Store - Watford.docx','DFS - Store - Darley Dale.docx','DFS - SoDelCo - Rugby.docx','ESG Group.docx','Finlay Hull.docx','Northern Automotive Systems.docx','Soufflet Malt.docx','Peterborough.docx','Cullompton.docx','Cobham.docx','Cambridge.docx','Blackburn & Darwen.docx','Beaconsfield.docx','Baldock.docx']
+ShakilClients = ['Amann Threads UK.docx','Baker & Baker - Bradford.docx','Chemoxy - Middlesbrough.docx','Chemoxy - Billingham.docx','Gilmour & Dean Ltd.docx','Hycrome.docx','Kettle Produce - Orkie Farm.docx','Kettle Produce - Balmalcolm.docx','Town Centre Securities - Carvers Warehouse.docx']
+JakeClients = ["4"]
+ConorClients = ['ELE Advanced - Skipton Road.docx','ELE Advanced - Churchill Way.docx','Sun Magic Juices - Nelson.docx','Leggett & Platt.docx','Emerson & Renwick Ltd - Peel Bank.docx', 'Emerson & Renwick - Technology Centre.docx']
+
+AntoniaClients = ['Chadwicks of Bury - Clondalkin.docx','Frederic Robinson - Unicorn Packaging Centre.docx','Graham & Brown - Shuttleworth Mead.docx','Graham & Brown - India Mill.docx','Harder Bros Ltd.docx','Libra Speciality Chemicals.docx','Tandom Metallurgical Group Ltd.docx','Peterborough.docx','Cullompton.docx','Cobham.docx','Cambridge.docx','Blackburn & Darwen.docx','Beaconsfield.docx','Baldock.docx']
+CalumClients = ['Gilmour & Dean Ltd.docx', 'Kettle Produce - Orkie Farm.docx', 'Kettle Produce - Balmalcolm.docx', 'McQueens Dairies.docx','Strathmore Foods Ltd.docx']
+MattClients = ['Airedale Chemicals.docx', 'Chemoxy - Middlesbrough.docx', 'Chemoxy - Billingham.docx', 'EBAC Ltd.docx', 'Finlay Beverages.docx', 'Kitwave - Millers Food, York.docx', 'Kitwave - Eden Farm, Peterlee.docx', 'Kitwave - Eden farm, Luton.docx', 'Palram DPL Ltd.docx', 'Pharmaron - Cardiff.docx','Pharmaron - Cramlington.docx','URM Ltd - Tilbury.docx', 'URM Ltd - South Kirkby.docx', 'URM Ltd - Knottingley.docx', 'URM Ltd - Doncaster.docx']
+VictorClients = ['Braces Bakery Pen-Y-Fan.docx', 'Braces Bakery CPM.docx', 'Branston - Perth.docx', 'Branston - Lincoln Protein.docx', 'Branston - Lincoln Prep.docx', 'Branston - Lincoln Fresh.docx', 'Branston - Ilminster.docx', 'ESG Group.docx','Northern Automotive Systems.docx', 'Soufflet Malt.docx','Peterborough.docx','Cullompton.docx','Cobham.docx','Cambridge.docx','Blackburn & Darwen.docx','Beaconsfield.docx','Baldock.docx']
+AndyBaClients = ['DFS-Store-Wednesbury.docx', 'DFS - Store - Watford.docx', 'DFS - Store - Darley Dale.docx', 'DFS - SoDelCo - Rugby.docx', 'Emerson & Renwick Ltd - Peel Bank.docx', 'Emerson & Renwick - Technology Centre.docx', 'Gordon Ellis & Co`.docx',  'Pharmaron - Hoddesdon.docx', 'Pharmaron - Rushden.docx']
+AndyBuClients = ['Alma Products.docx', 'Amann Threads UK.docx', 'Anchor Magnets.docx', 'The Authentic Food Company.docx', 'Baker & Baker - Wirral.docx', 'Baker & Baker - Bradford.docx', 'Darwen Terracotta.docx', 'Farrel Ltd.docx', 'Herbert Walkers.docx', 'Hycrome.docx','Leggett & Platt.docx', 'Norton Cast Products.docx','Safran Nacelles Ltd.docx', 'Town Centre Securities - Carvers Warehouse.docx','Head Office - Desking.docx','Seating.docx']
+
+
+#%%
+
+
+# 1.
+# Retrieving Data
+start_time = time.time()
+PowerRadarDeviceIdQuery = " select CAST(DeviceDetail.DeviceDetailDescription AS BIGINT) PowerRadarDeviceId INTO #PowerRadarDeviceId from PowerRadar.Catalog.SiteDetail inner join PowerRadar.Mapping.DeviceToSite on DeviceToSite.SiteId = SiteDetail.SiteId ANd DeviceToSite.EffectiveToDateTime = '9999-12-31' inner join PowerRadar.Catalog.DeviceDetail on DeviceDetail.DeviceId = DeviceToSite.DeviceId and DeviceDetail.EffectiveToDateTime = '9999-12-31' and DeviceDetail.DeviceAttributeId = 2 and ISNUMERIC(DeviceDetail.DeviceDetailDescription) = 1 where SiteDetail.EffectiveToDateTime = '9999-12-31' AND SiteDetail.SiteDetailDescription in ("+ clientlist  +") "
+DeviceIdQuery = """ SELECT DISTINCT Device.DeviceId, Device.[PowerRadarDeviceName] DeviceName, Device.[PowerRadarSiteName] SiteName INTO #DeviceId FROM [SubMeter].[PowerRadar.Data].[Device]  inner join #PowerRadarDeviceId PowerRadarDeviceId on PowerRadarDeviceId.PowerRadarDeviceId = Device.PowerRadarDeviceId WHERE Device.EffectiveToDateTime = '9999-12-31' """
+DataQuery = """ SELECT DeviceName, [OriginalMeasurementTimeUTC], SiteName, [PowerW], [EnergyWh]  into #Data FROM  [SubMeter].[PowerRadar.Data].[Measurement]  INNER JOIN  #DeviceId DeviceId ON DeviceId.DeviceId = Measurement.DeviceId WHERE  Measurement.EffectiveToDateTime = '9999-12-31' AND Measurement.OriginalMeasurementTimeUTC >= '2024-01-01' """
+conn=pyodbc.connect(r'Driver={SQL Server}; Server=; UID=DataViewer;PWD=;Database=Test')
+with conn.cursor() as cursor:
+    cursor.execute(PowerRadarDeviceIdQuery)
+    conn.commit()
+ 
+    cursor.execute(DeviceIdQuery)
+    conn.commit()
+ 
+    cursor.execute(DataQuery)
+    conn.commit()
+ 
+df = pd.read_sql_query("SELECT * FROM #Data", conn)
+ 
+conn.close()
+
+print("loaded succesfully")
+
+end_time = time.time()
+elapsed_time = end_time - start_time
+print(f"Time to load data: {elapsed_time:.4f} seconds")
+
+
+# Converting W and Wh to kW and kWh, respectively.
+df["PowerkW"] = df["PowerW"]
+df["EnergykWh"] = df["EnergyWh"]
+df = df.drop(["PowerW","EnergyWh"], axis=1)
+
+df["EnergykWh"] = df["EnergykWh"] / 1000
+df["PowerkW"]= df["PowerkW"] / 1000 
+
+#%%
+
+# 2. 
+# Splitting dataframes into seperate devices
+
+grouped = df.groupby('DeviceName')
+dfs = {key: group for key, group in grouped}
+
+# Removing any devices that have a usage history shorter than the minimum date range (+ 1 week to avoid bugs)
+dfs = {key: df for key, df in dfs.items() if len(df) >= ((MinimumDateRange*24*4)+8*24*4)}
+
+#%%
+
+# 3.
+# ALGORITHM
+
+DeviceStartDates = pd.DataFrame(columns=["Device Name","Site Name", "Start Date", "ACF"])
+
+
+for index, key in enumerate(dfs):
+    
+    ACFs = pd.DataFrame(columns=["Device","Date (Days from Present)", "ACF value"]) # Creating empty dataframe to story ACFs for each date step
+    
+    dfs[key] = dfs[key].sort_values(by="OriginalMeasurementTimeUTC",ascending=False).reset_index(drop=True) # Ordering newest first
+    dfs[key]['OriginalMeasurementTimeUTC'] = pd.to_datetime(dfs[key]['OriginalMeasurementTimeUTC'])  # Convert to datetime
+    dfs[key] = dfs[key].drop_duplicates(subset=['OriginalMeasurementTimeUTC'], keep='first') # Remove any duplicate bugged date rows
+    dfs[key].set_index('OriginalMeasurementTimeUTC', inplace=True)  # Set index
+    dfs[key] = dfs[key].resample('15T').asfreq().fillna(0) # all 0 values are missing so they're filled in here
+    
+    # Finding two dates: Last Sunday and the date that is MinimumDateRange months ago + target week
+    today = datetime.today()
+    # days_since_sunday = (today.weekday() + 1) % 7  # weekday(): Monday=0, Sunday=6
+    # last_sunday = (today - timedelta(days=days_since_sunday)).replace(hour=0, minute=0, second=0, microsecond=0)
+    # last_sunday = last_sunday + timedelta(days=1)
+    # offset = relativedelta(days=MinimumDateRange)
+    # target_date = last_sunday - offset
+    
+    days_since_monday = today.weekday()  
+    previous_monday = today - timedelta(days=days_since_monday + 7)
+    previous_monday = previous_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    target_date = previous_monday - timedelta(days=MinimumDateRange)
+    
+    dfMinimum = dfs[key].loc[target_date:previous_monday] # Finding the last three months of data + time from start of last week to now
+
+    #print(dfs[key]["SiteName"][0])
+    # CALCULATING ACF 
+    if len(dfMinimum) >0: # len(dfMinimum) will be equal to 0 in some instances where there is no data in our target range (typically uninstalled sensors)
+        acf_values, conf_intervals = acf(dfMinimum["EnergykWh"], nlags=24*15*4, alpha=0.05)
+       
+        lag=672
+        correlation_at_lag = acf_values[672]
+        conf_lower, conf_upper = conf_intervals[672]
+        
+        days_since_monday = today.weekday()  
+        previous_monday = today - timedelta(days=days_since_monday + 7)
+        previous_monday = previous_monday.replace(hour=0, minute=0, second=0, microsecond=0)
+        
+        Temp_df = dfs[key][dfs[key].index <= previous_monday]
+        
+        
+    
+        ACFs.loc[0] = [Temp_df["DeviceName"][0],MinimumDateRange,correlation_at_lag] # creating an initial record of ACF at the pre-selected minimum date range
+        if correlation_at_lag > CoeffThreshold:
+            for i in range(math.floor(len(Temp_df)/672)): # Finds how many weeks of data there are in a devices usage history, then rounds down and iterates that many times
+                dfExtraWeek = Temp_df.tail((MinimumDateRange*24*4)+((i+1)*672)) # Adds an extra week of data each loop
+                acf_values, conf_intervals = acf(dfExtraWeek["EnergykWh"], nlags=24*15*4, alpha=0.05) # Calculating ACF 
+                lag=672
+                correlation_at_lag = acf_values[672] # recording ACF 
+                ACFs.loc[i+1] = [Temp_df["DeviceName"][0],((MinimumDateRange*24*4)+((i+1)*672))/96,correlation_at_lag] # Converting "date" to days then saving ACF to dataframe
+                if i > ((MaximumDateRange-MinimumDateRange)/7):
+                    break
+        if ACFs["ACF value"].max() > CoeffThreshold:   #Checking if device's historic ACFs contain any values above the threshold
+            # Adding devicename, sitename, startdate, ACF, to a dataframe for any devices with good ACFs
+            DeviceStartDates.loc[index] = [ACFs.loc[ACFs['ACF value'].idxmax()][0], Temp_df["SiteName"][0],   datetime.now()  -   timedelta(  days =(ACFs.loc[ACFs['ACF value'].idxmax()][1]))    ,ACFs.loc[ACFs['ACF value'].idxmax()][2]]
+        ACFtest = ACFs
+
+DeviceStartDates['Start Date'] = pd.to_datetime(DeviceStartDates['Start Date'])
+def round_up(dt):
+    # Calculate the number of minutes to add
+    minutes_to_add = 15 - dt.minute % 15
+    # Round up and set seconds and milliseconds to 0
+    return (dt + pd.to_timedelta(minutes_to_add, unit='m')).replace(second=0, microsecond=0)
+DeviceStartDates["Start Date"] = DeviceStartDates["Start Date"].apply(round_up)
+
+
+
+# Adding dataframe containing anomaly info to word document
+def add_dataframe_to_doc(doc, df, title=""):
+    if title:
+        doc.add_paragraph(title, style='Heading 2')
+    
+    table = doc.add_table(rows=df.shape[0]+1, cols=df.shape[1])
+    table.style = 'Table Grid'
+
+    # Add header row
+    for j, column_name in enumerate(df.columns):
+        table.cell(0, j).text = column_name
+    # Add data rows
+    for i in range(df.shape[0]):
+        for j in range(df.shape[1]):
+            table.cell(i+1, j).text = str(df.iat[i, j])
+
+    doc.add_paragraph("\n")  # Space after table
+
+    
+
+doc = Document()
+SiteNameCheck = "EmptyDoc"
+
+# Removing any characters that can't be used in a filename
+def clean_filename(filename):
+    return re.sub(r'[<>:"/\\|?*]', '', filename)
+
+
+today = datetime.today()
+days_since_monday = (today.weekday() + 7) % 7
+WCdate = today - timedelta(days=days_since_monday + 7)
+WCdate = WCdate.strftime('%d-%m-%Y')
+
+DeviceStartDates = DeviceStartDates.sort_values(by="Site Name", ascending=True)
+for index, row in DeviceStartDates.iterrows():
+
+    # Training model on data
+    try:
+        s_train = dfs[row['Device Name']]["EnergykWh"]
+        s_train = s_train.resample('H').sum()
+        
+        
+        
+        max_date = s_train.index.max().normalize()
+        start_of_week = max_date - pd.DateOffset(days=max_date.weekday() + 7)  # Start of last week
+        end_of_week = start_of_week + pd.DateOffset(days=7)  # End of last week
+        
+        s_test = s_train[(s_train.index >= start_of_week) & (s_train.index <= end_of_week)]
+        s_train = s_train[s_train.index < start_of_week]
+        
+        s_test = s_test.rename('Values')
+        s_train = s_train.rename('Values')
+        s_test.index = s_test.index.rename('Time')
+        s_train.index = s_train.index.rename('Time')
+        s_train = s_train.to_frame()
+        s_test = s_test.to_frame()
+        s_test = s_test.iloc[:-1]
+        # print("start date before change: "+ str(s_train.index[0]) )
+        # print("end date before change: "+ str(s_train.index[-1]) )
+        s_train = s_train[s_train.index >= row["Start Date"]]
+        # print("start date after change: "+ str(s_train.index[0]))
+        # print("end date after change: "+str(s_train.index[-1]) )
+        seasonal_ad = SeasonalAD(c=0, side="both")
+        train_anomalies = seasonal_ad.fit_detect(s_train)
+    
+        timelist = ["00:00","01:00","02:00","03:00","04:00","05:00","06:00","07:00","08:00","09:00","10:00"
+                    ,"11:00","12:00","13:00","14:00","15:00","16:00","17:00","18:00","19:00","20:00","21:00"
+                    ,"22:00","23:00"]
+    
+        avglist =[]
+        stdlist = []
+        df2 = pd.DataFrame(columns =["avg","std"])
+    
+        for week in [0,1,2,3,4,5,6]:    
+            for time in timelist:
+                daydata = s_train[s_train.index.dayofweek == week].between_time(time, time)
+                sd = daydata["Values"].std()
+                avg = daydata["Values"].mean()
+                avglist.append(avg)
+                stdlist.append(sd)
+        df2["avg"] = avglist
+        df2["std"] = stdlist
+    
+        s_test = validate_series(s_test)
+        anomalies_pred = seasonal_ad.detect(s_test)
+    
+        FoundAnomalies = anomalies_pred[anomalies_pred["Values"] != False]
+        AnomValues = []
+    
+        for anom in FoundAnomalies.index:
+            value_at_specific_time = s_test.loc[anom, 'Values']
+            AnomValues.append(value_at_specific_time)
+    
+        FoundAnomalies2 = FoundAnomalies.copy()
+        FoundAnomalies.reset_index(inplace=True)
+        FoundAnomalies['Date'] = FoundAnomalies['Time'].dt.date
+        FoundAnomalies['Time'] = FoundAnomalies['Time'].dt.time
+        FoundAnomalies.drop(columns=['Values'], inplace=True)
+        FoundAnomalies['Values'] = AnomValues
+        AnomAverages = []
+        AnomStd = []
+        zScores = []
+        Weekday = []
+        days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        for date,time,value in zip(FoundAnomalies['Date'],FoundAnomalies['Time'],FoundAnomalies["Values"]):
+            time = str(time)
+            time = time[:5]
+            specific_time = pd.to_datetime(time).time()
+            specific_day = date.weekday()  # 0=Mon , 1=Tues, ...
+            ValuesTrain = s_train[(s_train.index.time == specific_time) & (s_train.index.dayofweek == specific_day)]
+            ValuesTest = s_test[(s_test.index.time == specific_time) & (s_test.index.dayofweek == specific_day)]
+            dfs2 = [ValuesTrain,ValuesTest]
+            Anoms = pd.concat(dfs2, axis=0)
+            AnomAvg = (Anoms["Values"].sum())/len(Anoms["Values"])
+            AnomAverages.append(AnomAvg)
+            sd = Anoms["Values"].std()
+            AnomStd.append(sd)
+            zScore = (value - AnomAvg)/sd
+            zScores.append(zScore)
+            Weekday.append(days[date.weekday()])
+            
+    
+        
+        FoundAnomalies["Mean Consumption"] = AnomAverages
+        FoundAnomalies["Standard Deviation"] = AnomStd
+        FoundAnomalies["Z score of Anomaly"] = zScores
+        FoundAnomalies["Day of Week"] = Weekday
+        FilteredAnomalies = FoundAnomalies[(FoundAnomalies["Z score of Anomaly"] <= -zScoreThreshold) | (FoundAnomalies["Z score of Anomaly"] >= zScoreThreshold)]
+    
+        dates = FilteredAnomalies['Date'].tolist()
+        dates = [str(element) for element in dates]
+        times = FilteredAnomalies['Time'].tolist()
+        times = [str(element) for element in times]
+        datetimes = []
+    
+        for date, time in zip(dates,times):
+            joined_datetime = date + " "+ time
+            datetimes.append(joined_datetime)
+    
+        if len(FilteredAnomalies) > 0:
+            AnomPlot = pd.DataFrame(datetimes,columns= ["Datetime"])
+            AnomPlot['Datetime'] = pd.to_datetime(AnomPlot['Datetime'])
+            AnomPlot.set_index('Datetime', inplace=True)
+        
+            anoms1 = FilteredAnomalies["Values"].tolist()
+            AnomPlot["Values"] = anoms1
+            current_order = FilteredAnomalies.columns.tolist()
+            new_order = ['Time', 'Date', 'Day of Week','Values',"Mean Consumption","Standard Deviation","Z score of Anomaly"]
+            FilteredAnomalies = FilteredAnomalies[new_order]
+            plt.figure(figsize=(10, 6))
+            plt.plot(s_test.index, s_test.Values, color='blue', label = "Recorded Consumption" )
+            plt.plot(s_test.index, df2.avg, color='red', label = "Typical Consumption")
+            plt.scatter(AnomPlot.index,AnomPlot.Values,color='red', label='Anomalies')
+            plt.title(row['Device Name'] + " - " + row["Site Name"])
+            plt.xlabel('Date')
+            plt.ylabel('Power (kWh)')
+            plt.legend()
+            plt.grid(True)
+            #plt.show()
+            
+            plot_filename = row["Site Name"] + " - " + row["Device Name"] +".png"
+            plot_filename = clean_filename(plot_filename)
+            plt.savefig(plot_filename, bbox_inches='tight')
+            plt.close()
+              # Close the plot to free memory   
+             
+            FilteredAnomalies[['Values','Mean Consumption','Standard Deviation','Z score of Anomaly']] = FilteredAnomalies[['Values','Mean Consumption','Standard Deviation','Z score of Anomaly']].round(2)
+            # today = datetime.today()
+            # offset = (today.weekday() - 0) % 7  # 0 is Monday
+            # last_monday = today - timedelta(days=offset)   
+            # last_monday.strftime('%Y-%m-%d') 
+            if SiteNameCheck != row["Site Name"]:
+                doc.save("WC " + WCdate + " - " + SiteNameCheck+ ".docx")
+                doc = Document()
+                doc.add_heading("Device Anomalies", level=1) 
+                doc.add_picture(plot_filename, width=Inches(5))
+                add_dataframe_to_doc(doc, FilteredAnomalies,row["Site Name"] + " - " + row['Device Name'] )
+               
+            else:
+                doc.add_picture(plot_filename, width=Inches(5))
+                add_dataframe_to_doc(doc, FilteredAnomalies,row["Site Name"] + " - " + row['Device Name'] )
+                
+            SiteNameCheck = row["Site Name"]
+    except Exception as e:
+        print(e)
+ 
+  
+
+doc.save("WC " + WCdate + " - "+ SiteNameCheck+".docx")
+
+
+source_folder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector"
+HeatherFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Heather"
+WillFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Will"
+JakeFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Jake"
+ShakilFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Shakil"
+JackFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Jack"
+ConorFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Conor"
+
+AntoniaFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Antonia"
+AndyBaFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\AndyBa"
+AndyBuFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\AndyBu"
+VictorFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Victor"
+MattFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Matt"
+CalumFolder = "G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Calum"
+
+
+os.makedirs(JackFolder, exist_ok=True)
+os.makedirs(HeatherFolder, exist_ok=True)
+os.makedirs(WillFolder, exist_ok=True)
+os.makedirs(ShakilFolder, exist_ok=True)
+os.makedirs(JakeFolder, exist_ok=True)
+os.makedirs(ConorFolder, exist_ok=True)
+os.makedirs(AntoniaFolder, exist_ok=True)
+os.makedirs(AndyBaFolder, exist_ok=True)
+os.makedirs(AndyBuFolder, exist_ok=True)
+os.makedirs(VictorFolder, exist_ok=True)
+os.makedirs(MattFolder, exist_ok=True)
+os.makedirs(CalumFolder, exist_ok=True)
+
+# Moving 
+def FileMove(NameFolder, NameClients):
+    for file_name in NameClients:
+        file_name = "WC " + WCdate + " - " + file_name
+        source_path = os.path.join(source_folder, file_name)
+        destination_path = os.path.join(NameFolder, file_name)
+        
+        if os.path.exists(source_path):  # Check if file exists before moving
+            shutil.copy2(source_path, destination_path)
+
+FileMove(JackFolder, JackClients)
+FileMove(HeatherFolder, HeatherClients)
+FileMove(WillFolder, WillClients)
+FileMove(ShakilFolder, ShakilClients)
+FileMove(JakeFolder, JakeClients)
+FileMove(ConorFolder, ConorClients)
+FileMove(AntoniaFolder, AntoniaClients)
+FileMove(AndyBaFolder, AndyBaClients)
+FileMove(AndyBuFolder, AndyBuClients)
+FileMove(VictorFolder, VictorClients)
+FileMove(MattFolder, MattClients)
+FileMove(CalumFolder, CalumClients)
+
+
+        
+png_files = glob.glob(os.path.join(source_folder, "*.png"))
+
+# Loop through and delete each file
+for file in png_files:
+    try:
+        os.remove(file)
+
+    except Exception as e:
+        print(e)
+
+
+
+# Email configuration
+EMAIL_SENDER = '9jberry9@gmail.com'
+EMAIL_PASSWORD = ''
+SMTP_SERVER = 'smtp.gmail.com'
+SMTP_PORT = 587  # Gmail SMTP port is 587
+JackEmail = "@businesswisesolutions.co.uk"
+JakeEmail = "@businesswisesolutions.co.uk"
+HeatherEmail = "@businesswisesolutions.co.uk"
+WillEmail = "@businesswisesolutions.co.uk"
+ShakilEmail = "@businesswisesolutions.co.uk"
+ConorEmail = "@businesswisesolutions.co.uk"
+
+AntoniaEmail = "@businesswisesolutions.co.uk"
+AndyBaEmail = "@businesswisesolutions.co.uk"
+AndyBuEmail = "@businesswisesolutions.co.uk"
+MattEmail = "@businesswisesolutions.co.uk"
+VictorEmail = "@businesswisesolutions.co.uk"
+CalumEmail = "@businesswisesolutions.co.uk"
+
+
+HeatherFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Heather")
+WillFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Will")
+JakeFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Jake")
+ShakilFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Shakil")
+JackFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Jack")
+ConorFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Conor")
+
+AntoniaFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Antonia")
+AndyBaFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\AndyBa")
+AndyBuFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\AndyBu")
+MattFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Matt")
+VictorFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Victor")
+CalumFolder2 = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector\\Calum")
+
+
+today = datetime.today()
+
+days_since_monday = (today.weekday() + 7) % 7
+WCdate = today - timedelta(days=days_since_monday + 7)
+WCdate = WCdate.strftime('%Y-%m-%d')  
+
+
+
+def SendEmail(folder1,folder2, recipient):
+    files = [f for f in os.listdir(folder2) if not f.lower() == "desktop.ini"]
+    if files:
+        print("Sent to: " + recipient)
+        
+        # Create email message
+        msg = EmailMessage()
+        msg["Subject"] = "Device Anomalies for WC " + WCdate
+        msg["From"] = EMAIL_SENDER
+        msg["To"] = recipient
+        msg.set_content("Please see the attached document for " + recipient)
+    
+        # # Attach body to the message
+        word_files = glob.glob(os.path.join(folder1, "*.doc*"))
+        for file_path in word_files:
+            with open(file_path, "rb") as f:
+                file_data = f.read()
+                file_name = os.path.basename(file_path)
+                msg.add_attachment(file_data, maintype="application", subtype="octet-stream", filename=file_name)
+    
+        # Connect to SMTP server
+    
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()  # Secure connection
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.send_message(msg)
+            print("Sent successfully to: " + recipient)
+    
+            
+    else:
+        print("Sent to: " + recipient)
+            
+           # Create email message
+        msg = EmailMessage()
+        msg["Subject"] = "Device Anomalies"
+        msg["From"] = EMAIL_SENDER
+        msg["To"] = recipient
+        msg.set_content("No anomalies found this week.")
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()  # Secure connection
+            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+            server.send_message(msg)
+            print("Sent successfully to: " + recipient)
+
+SendEmail(JackFolder, JackFolder2, JackEmail)
+# SendEmail(WillFolder, WillFolder2, WillEmail)
+# SendEmail(HeatherFolder, HeatherFolder2, HeatherEmail)
+# SendEmail(ConorFolder, ConorFolder2, ConorEmail)
+# SendEmail(ShakilFolder, ShakilFolder2, ShakilEmail)
+
+# SendEmail(AntoniaFolder, AntoniaFolder2, AntoniaEmail)
+# SendEmail(AndyBaFolder, AndyBaFolder2, AndyBaEmail)
+# SendEmail(AndyBuFolder, AndyBuFolder2, AndyBuEmail)
+# SendEmail(MattFolder, MattFolder2, MattEmail)
+# SendEmail(VictorFolder, VictorFolder2, VictorEmail)
+# SendEmail(CalumFolder, CalumFolder2, CalumEmail)
+
+
+# Send all to me
+# SendEmail(WillFolder, WillFolder2, JackEmail)
+# SendEmail(HeatherFolder, HeatherFolder2, JackEmail)
+# SendEmail(ConorFolder, ConorFolder2, JackEmail)
+# SendEmail(ShakilFolder, ShakilFolder2, JackEmail)
+
+# SendEmail(AntoniaFolder, AntoniaFolder2, JackEmail)
+# SendEmail(AndyBaFolder, AndyBaFolder2, JackEmail)
+# SendEmail(AndyBuFolder, AndyBuFolder2, JackEmail)
+# SendEmail(MattFolder, MattFolder2, JackEmail)
+# SendEmail(VictorFolder, VictorFolder2, JackEmail)
+# SendEmail(CalumFolder, CalumFolder2, JackEmail)
+
+# Deleting remaining doc files
+root_folder = Path("G:\\.shortcut-targets-by-id\\1DDDepdM3lG41WX_pPjId0_Gdkc23PnIs\\Energy\\EMT\\Energy Projects\\Team\\1 - Team Members\\Analytics & Reporting Team\\Jack Berry\\Python\\DeviceAnomalyDetector")
+for word_file in root_folder.rglob("*.doc*"):
+    try:
+        word_file.unlink()
+    except Exception as e:
+        print(e)
+
+#%%
+
+# today = datetime.today()
+# days_since_monday = (today.weekday() + 7) % 7
+# WCdate = today - timedelta(days=days_since_monday + 7)
+# WCdate = WCdate.strftime('%Y-%m-%d')  
+
+
+#%%
+
+
+
+
+
